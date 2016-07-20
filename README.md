@@ -1,5 +1,5 @@
 # elk-docker
-<<<<<<< HEAD
+
 Run the ELK stack the "Docker" way.
 
 Currently to get this setup working you will need to do the following:
@@ -18,4 +18,4 @@ Similarly, you can adjust the heap memory for Logstash by editing the `LS_HEAP_S
 The default values for these are 1GB (for ES) and 2GB (for Logstash).
 =======
 ELK Stack on Docker containers
->>>>>>> 7530eec67efe4301a307943aba06d2370a638904
+
