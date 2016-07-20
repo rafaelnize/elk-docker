@@ -1,0 +1,1 @@
+{"rsync":{"vagrant-cache":{"id":"vagrant-cache","type":"rsync","mount_options":["rw","vers=3","tcp","nolock"],"guestpath":"/tmp/vagrant-cache","hostpath":"/home/nize/.vagrant.d/cache/ubuntu/trusty64","disabled":false,"owner":"vagrant","group":"vagrant"}},"virtualbox":{"/vagrant":{"guestpath":"/vagrant","hostpath":"/home/nize/Documents/Linio/elk-docker","disabled":false}}}
