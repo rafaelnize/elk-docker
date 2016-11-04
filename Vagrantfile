@@ -27,11 +27,15 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
 
 
   config.vm.box = "ubuntu/trusty64"
-  config.vm.network "private_network", ip: "192.168.33.10"
+  #config.vm.network "private_network", ip: "192.168.33.10", virtualbox__intnet: true
+  config.vm.network "public_network", use_dhcp_assigned_default_route: true
+  config.vm.network "forwarded_port", guest: 4789, host: 4789
+  config.vm.network "forwarded_port", guest: 7946, host: 7946
   config.vm.network "forwarded_port", guest: 5601, host: 5601
   config.vm.network "forwarded_port", guest: 5000, host: 5000
   config.vm.network "forwarded_port", guest: 5001, host: 5001
   config.vm.network "forwarded_port", guest: 5002, host: 5002
+  config.vm.network "forwarded_port", guest: 5044, host: 9000
   config.vm.network "forwarded_port", guest: 6000, host: 6000
   config.vm.network "forwarded_port", guest: 6001, host: 6001
   config.vm.network "forwarded_port", guest: 6002, host: 6002
@@ -39,10 +43,10 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
   config.vm.network "forwarded_port", guest: 4546, host: 4546
   config.vm.network "forwarded_port", guest: 8000, host: 8000
   config.vm.network "forwarded_port", guest: 8090, host: 8090
-  config.vm.network "forwarded_port", guest: 9000, host: 9000
   config.vm.network "forwarded_port", guest: 80, host: 8080
   config.vm.network "forwarded_port", guest: 81, host: 8180
-
+  config.vm.network "forwarded_port", guest: 1936, host: 1936
+  config.vm.network "forwarded_port", guest: 2375, host: 2375
   HOSTNAME = 'docker'
   DOMAIN   = 'elkstack.local'
   Vagrant.require_version '>= 1.7.0'
@@ -55,10 +59,10 @@ config.vm.provider "virtualbox" do |v|
   v.cpus = 2
 end
 
-config.vm.provider "vmware_fusion" do |v|
-  v.vmx["memsize"] = "2024"
-  v.vmx["numvcpus"] = "2"
-end
+#config.vm.provider "vmware_fusion" do |v|
+#  v.vmx["memsize"] = "2024"
+#  v.vmx["numvcpus"] = "2"
+#end
 
 $script = <<SCRIPT
 sudo apt-get -y update
@@ -75,6 +79,10 @@ sudo sh -c "curl -L https://github.com/docker/compose/releases/download/1.7.1/do
 sudo chmod +x /usr/local/bin/docker-compose > /dev/null 2>&1
 echo "=> Finished installation of Docker"
 sudo apt-get -y install openssl
+mkdir elk ; ln -s /vagrant elk
+
+sudo docker daemon -H tcp://0.0.0.0:2375 -H unix:///var/run/docker.sock
+sudo docker run hello-world
 SCRIPT
 
 config.vm.provision "shell" , inline: "sudo sysctl -w vm.max_map_count=262144", run: "always"

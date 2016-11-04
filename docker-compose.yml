@@ -1,5 +1,6 @@
 version: '2'
 services:
+
     elasticsearch:
       image: elasticsearch:5
       command: elasticsearch
@@ -13,6 +14,10 @@ services:
         # Extra ES configuration options
         - ./es/elasticsearch.yml:/usr/share/elasticsearch/config/elasticsearch.yml
         - /etc/localtime:/etc/localtime:ro
+        - /mnt/elasticsearch_1:/mnt/elasticsearch_1
+        - /mnt/elasticsearch_2:/mnt/elasticsearch_2
+        - /mnt/elasticsearch_3:/mnt/elasticsearch_3
+
       ports:
         - "9200:9200"
         - "9300:9300"
@@ -71,11 +76,12 @@ services:
     msgqueue:
       image: rabbitmq:3-management
       hostname: msgqueue
-      #environment:
+      environment:
          #- RABBITMQ_ERLANG_COOKIE="secret"
          #- RABBITMQ_DEFAULT_USER="user"
          #- RABBITMQ_DEFAULT_PASS="password"
          #- RABBITMQ_HIPE_COMPILE="1"
+          - LOGSPOUT=ignore
 
       volumes:
          - "msgqueue:/var/lib/rabbitmq"
@@ -84,7 +90,10 @@ services:
       ports:
          - 8090:15672
 
-    logstash_shipping:
+      #depends_on:
+        # - logstash_indexing
+
+    logstash_shipping01:
       image: logstash:5
       command: logstash -w 4 -f /etc/logstash/conf.d/logstash.conf
       environment:
@@ -99,18 +108,53 @@ services:
         #- ./logstash_shipping/logstash-forwarder.crt:/etc/logstash/logstash-forwarder.crt
         - /etc/localtime:/etc/localtime:ro
       ports:
-        - "12201:12201/udp"
-        - "6000:6000"
-        - "6001:6001"
-        - "6002:6002/udp"
-        - "9000:9000"
+        - "9201:9200"
       links:
-        - elasticsearch
+        #- elasticsearch
         - msgqueue
 
       depends_on:
         - msgqueue
-        - elasticsearch
+        #- elasticsearch
+
+
+    logstash_shipping02:
+      image: logstash:5
+      command: logstash -w 4 -f /etc/logstash/conf.d/logstash.conf
+      environment:
+        # This helps Logstash out if it gets too busy
+        - LS_HEAP_SIZE=2048m
+        - LOGSPOUT=ignore
+
+      volumes:
+        # volume mount the logstash config
+        - ./logstash_shipping/logstash.conf:/etc/logstash/conf.d/logstash.conf
+        #- ./logstash_shipping/logstash-forwarder.key:/etc/logstash/logstash-forwarder.key
+        #- ./logstash_shipping/logstash-forwarder.crt:/etc/logstash/logstash-forwarder.crt
+        - /etc/localtime:/etc/localtime:ro
+
+      links:
+       # - elasticsearch
+        - msgqueue
+
+      depends_on:
+        - msgqueue
+       # - elasticsearch
+
+    haproxy:
+      image: "tutum/haproxy:latest"
+      ports:
+         - "5044:5044"
+         - "1936:1936"
+      #volumes:
+      #   - "./haproxy:/haproxy-override"
+      links:
+         - logstash_shipping01
+         - logstash_shipping02
+
+      environment:
+          - STATS_PORT=1936
+          - LOGSPOUT=ignore
 
     logspout:
       build: ./logspout
@@ -119,91 +163,91 @@ services:
       volumes:
          - /var/run/docker.sock:/var/run/docker.sock
          - /etc/localtime:/etc/localtime:ro
-      command: /bin/dockerize -timeout 200s -wait tcp://logstash_shipping:6000 /bin/logspout
+      command: /bin/dockerize -timeout 200s -wait tcp://logstash_shipping02:6000 /bin/logspout
       environment:
-         - ROUTE_URIS=tcp://logstash_shipping:6000
+         - ROUTE_URIS=tcp://logstash_shipping02:6000
          - LOGSPOUT=ignore
 
       links:
-         - logstash_shipping
+         - logstash_shipping02
 
       depends_on:
-         - logstash_shipping
+         - logstash_shipping02
 
-    cadvisor:
-      image: google/cadvisor-canary
-      hostname: cadvisor
-      privileged: true
-      ports:
-        - "81:8080"
-      volumes:
-        - "/:/rootfs:ro"
-        - "/var/run:/var/run:rw"
-        - "/sys:/sys:ro"
-        - "/var/lib/docker/:/var/lib/docker:ro"
-      
-    nginx:
-      image: nginx:latest
-      ports:
-         - "80:80"
-      depends_on:
-         - logspout
-      environment:
-         - NGINX_PORT=80
-      volumes:
-         - /etc/localtime:/etc/localtime:ro
-
-      depends_on:
-         - logstash_shipping
-
-#      logging:
-#        driver: syslog
-#        options:
-#          syslog-address: "tcp://logstash:5001"
-
-#    mysql:
-#      image: mysql
-#      environment:
-#        MYSQL_ROOT_PASSWORD: "password"
-#      volumes:
-#        - mysqldata:/var/lib/mysql
-#        - mysqllog:/var/log/mysql/mysql
-#        - /etc/localtime:/etc/localtime:ro
-#
-#      depends_on:
-#        - logspout
-#
-#    wordpress:
-#      image: wordpress
-#      links:
-#         - mysql:mysql
-#      depends_on:
-#         - mysql
+#    cadvisor:
+#      image: google/cadvisor-canary
+#      hostname: cadvisor
+#      privileged: true
 #      ports:
-#         - "8011:80"
+#        - "81:8080"
 #      volumes:
-#         - wordpressdata:/var/www
-#         - wordpresslog:/var/log
-#      environment:
-#         WORDPRESS_DB_PASSWORD: "password"
+#        - "/:/rootfs:ro"
+#        - "/var/run:/var/run:rw"
+#        - "/sys:/sys:ro"
+#        - "/var/lib/docker/:/var/lib/docker:ro"
 #
-#    mysql_log:
-#       image: debian
-#       command: tail -F /mnt/mysql/error.log
-#       volumes:
-#         - mysqllog:/mnt
-#       links:
-#         - mysql
-#       depends_on:
-#         - mysql
-
-#    load_test:
-#       image: russmckendrick/ab
-#       links:
-#          - wordpress:wordpress
-#       depends_on:
-#          - wordpress
-#       command: ab -k -n 10000 -c 5 http://wordpress:80/test
+#    nginx:
+#      image: nginx:latest
+#      ports:
+#         - "80:80"
+#      depends_on:
+#         - logspout
+#      environment:
+#         - NGINX_PORT=80
+#      volumes:
+#         - /etc/localtime:/etc/localtime:ro
+#
+#      depends_on:
+#         - logstash_shipping02
+#
+##      logging:
+##        driver: syslog
+##        options:
+##          syslog-address: "tcp://logstash:5001"
+#
+##    mysql:
+##      image: mysql
+##      environment:
+##        MYSQL_ROOT_PASSWORD: "password"
+##      volumes:
+##        - mysqldata:/var/lib/mysql
+##        - mysqllog:/var/log/mysql/mysql
+##        - /etc/localtime:/etc/localtime:ro
+##
+##      depends_on:
+##        - logspout
+##
+##    wordpress:
+##      image: wordpress
+##      links:
+##         - mysql:mysql
+##      depends_on:
+##         - mysql
+##      ports:
+##         - "8011:80"
+##      volumes:
+##         - wordpressdata:/var/www
+##         - wordpresslog:/var/log
+##      environment:
+##         WORDPRESS_DB_PASSWORD: "password"
+##
+##    mysql_log:
+##       image: debian
+##       command: tail -F /mnt/mysql/error.log
+##       volumes:
+##         - mysqllog:/mnt
+##       links:
+##         - mysql
+##       depends_on:
+##         - mysql
+#
+##    load_test:
+##       image: russmckendrick/ab
+##       links:
+##          - wordpress:wordpress
+##       depends_on:
+##          - wordpress
+##       command: ab -k -n 10000 -c 5 http://wordpress:80/test
 
 volumes:
   elasticsearch:
